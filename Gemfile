@@ -1,7 +1,5 @@
 source 'https://rubygems.org'
 
+gem 'pry'
 gem 'nokogiri'
 gem 'selenium-webdriver'
-
-# gem 'faraday'
-# gem 'faraday-cookie_jar'

@@ -22,6 +22,8 @@ RUN mv chromedriver /usr/bin/chromedriver
 RUN chown root:root /usr/bin/chromedriver
 RUN chmod +x /usr/bin/chromedriver
 
+RUN mkdir /site_scrapper_volume
+
 RUN gem install bundler
 
 COPY Gemfile /

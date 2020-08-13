@@ -4,6 +4,7 @@
 # https://medium.com/@cesargralmeida/using-selenium-chrome-driver-and-capybara-to-automate-web-only-reports-7ffda7dfb83e
 
 require 'selenium-webdriver'
+require 'fileutils'
 
 # TODO: can move 'driver' and 'wait' to a Singleton
 # TODO: rewrite 'with_retry_if_stale' without using the 'callable' argument - with a simple block
@@ -24,6 +25,13 @@ require 'selenium-webdriver'
 # A.new.call do
 #   puts '111'
 # end
+
+OUT_DIR = begin
+  dirname = "#{ENV.fetch('query')}__#{ENV.fetch('location')}".tr(' ', '_')
+  dirname = File.join('.', 'site_scrapper_volume', dirname)
+  FileUtils.mkdir_p(dirname)
+  dirname
+end
 
 class Utils
 
@@ -91,10 +99,12 @@ class VacanciesListCollector
       end
     )
     arr << { title: title, desc: desc  }
-    File.open("site_scrapper_volume/#{counter[:current_vacancy]}", 'w') do |f|
+
+    filename = File.join(OUT_DIR, counter[:current_vacancy].to_s)
+
+    File.open(filename, 'w') do |f|
       f.puts("title: \n#{title}\ndesc: \n#{desc}")
     end
-
   end
 
   private

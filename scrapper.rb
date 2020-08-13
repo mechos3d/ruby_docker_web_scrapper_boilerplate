@@ -5,10 +5,7 @@
 
 require 'selenium-webdriver'
 
-# NOTE: there are 30 links per page.
-
 # TODO: can move 'driver' and 'wait' to a Singleton
-
 # TODO: rewrite 'with_retry_if_stale' without using the 'callable' argument - with a simple block
 
 # class A
@@ -56,21 +53,18 @@ class Utils
     close_modal_button =
       @wait.until { @driver.find_elements(css: '#JAModal svg.modal_closeIcon-svg') }.first
 
-    # NOTE: Setting display: none instead of closing the modal by clicking on "close" button.
-    # script = 'var elt = document.querySelector("#JAModal"); elt.setAttribute("style", "display: none;");'
-    # driver.execute_script(script)
     close_modal_button.click
   end
 end
 
 # TODO: refactor this:
 class VacanciesListCollector
-  def initialize(driver, wait, index, page_index, arr)
-    @driver      = driver
-    @wait        = wait
-    @index       = index
-    @page_index  = page_index
-    @arr         = arr
+  def initialize(driver, wait, arr, index, counter)
+    @driver   = driver
+    @wait     = wait
+    @arr      = arr
+    @index    = index
+    @counter  = counter
   end
 
   def call
@@ -83,7 +77,7 @@ class VacanciesListCollector
       end
     )
 
-    sleep(5)
+    sleep(8)
 
     title = Utils.new(driver, wait).with_retry_if_stale(
       lambda do
@@ -97,15 +91,20 @@ class VacanciesListCollector
       end
     )
     arr << { title: title, desc: desc  }
+    File.open("site_scrapper_volume/#{counter[:current_vacancy]}", 'w') do |f|
+      f.puts("title: \n#{title}\ndesc: \n#{desc}")
+    end
 
-    driver.save_screenshot("/site_scrapper_volume/#{page_index}__#{index}.png")
   end
 
   private
 
-  attr_reader :driver, :wait, :index, :page_index, :arr
+  attr_reader :driver, :wait, :arr, :index, :counter
 
 end
+
+# TODO: show total number of found jobs and then show the current job total-number (not just page_index + index)
+#  '#MainColSummary' ->  p.jobsCount
 
 class Scrapper
 
@@ -147,18 +146,18 @@ class Scrapper
     ## -----------------------------------------------------------------
     login
 
-    sleep(3)
+    sleep(10)
 
     enter_search_query
 
-    sleep(3)
+    sleep(10)
 
     arr = []
     iterations = 0
-    page_index = 0
+    counter = { current_vacancy: 0 }
 
     loop do
-      collect_vacancies_page(arr, page_index)
+      collect_vacancies_page(arr, counter)
       break if last_page? || iterations > 30 # TODO: move this magic number '30' to a constant
       next_page_button = driver.find_elements(css: '#FooterPageNav li.next').first
 
@@ -174,7 +173,6 @@ class Scrapper
 
       # next_page_button.click
       Utils.new(driver, wait).kill_intrusive_modal { next_page_button.click }
-      page_index += 1
 
       # TODO: obviously it's better to find another way to guarantee that new content is already loaded:
       #       one way is to find some element, and than to check it's contents every 0.1 seconds.
@@ -193,12 +191,6 @@ class Scrapper
   private
 
   attr_reader :wait, :driver
-
-  # def remove_modal_window_element
-  #   script = 'var elem = document.querySelector("#JAModal"); elem.remove();'
-  #   driver.execute_script(script)
-  # end
-
 
   def last_page?
     results_footer_text = wait.until { driver.find_element(css: '#ResultsFooter') }.text
@@ -232,28 +224,30 @@ class Scrapper
     element.clear
 
     element = wait.until { driver.find_element(id: 'sc.location') }
-    element.send_keys('berlin')
+    element.send_keys(ENV.fetch('location'))
     element.send_keys(Selenium::WebDriver::Keys::KEYS[:tab])
 
     element = wait.until { driver.find_element(id: 'sc.keyword') }
-    element.send_keys('ruby engineer')
+    element.send_keys(ENV.fetch('query'))
     sleep(0.1)
     element.send_keys(Selenium::WebDriver::Keys::KEYS[:return])
   end
 
-  def collect_vacancies_page(arr, page_index)
+  def collect_vacancies_page(arr, counter)
     vacancies_count = wait.until { driver.find_elements(css: 'article#MainCol div.jobContainer') }.size
-    puts " vac_count: #{vacancies_count}"
 
     vacancies_count.times do |index|
-      puts " index: #{index}"
+      puts "vacancy: #{counter[:current_vacancy]}"
 
-      VacanciesListCollector.new(driver, wait, index, page_index, arr).call
+      current_index = counter[:current_vacancy]
+      unless current_index < ENV.fetch('offset', 0).to_i
+        VacanciesListCollector.new(driver, wait, arr, index, counter).call
+      end
+      counter[:current_vacancy] += 1
     end
   end
 end
 
-# driver.save_screenshot('/site_scrapper_volume/foo.png')
-# driver.save_screenshot('/site_scrapper_volume/zzz.png')
-
 Scrapper.new.call
+
+# driver.save_screenshot("/site_scrapper_volume/#{page_index}__#{index}.png")

@@ -6,6 +6,9 @@
 require 'selenium-webdriver'
 require 'fileutils'
 
+# TO execute:
+# docker run -it --rm -v /Users/gorg/my_stuff/ruby_stuff/glassdoor_site_scrapper/site_scrapper_volume:/site_scrapper_volume -e login=... -e password="..." -e query="ruby developer" -e location="Spain" scrapper_image
+
 # TODO: can move 'driver' and 'wait' to a Singleton
 # TODO: rewrite 'with_retry_if_stale' without using the 'callable' argument - with a simple block
 
@@ -79,7 +82,8 @@ class VacanciesListCollector
     Utils.new(driver, wait).with_retry_if_stale(
       lambda do
         Utils.new(driver, wait).kill_intrusive_modal do
-          vacs = wait.until { driver.find_elements(css: 'article#MainCol div.jobContainer') }
+#         vacs = wait.until { driver.find_elements(css: 'article#MainCol div.jobContainer') }
+          vacs = wait.until { driver.find_elements(css: 'article#MainCol li.react-job-listing') }
           vacs[index].click
         end
       end
@@ -156,11 +160,16 @@ class Scrapper
     ## -----------------------------------------------------------------
     login
 
+    puts 'Logged in'
     sleep(10)
 
     enter_search_query
 
+    puts 'Entered search query'
+
     sleep(10)
+
+    # click_see_all_jobs
 
     arr = []
     iterations = 0
@@ -171,17 +180,6 @@ class Scrapper
       break if last_page? || iterations > 30 # TODO: move this magic number '30' to a constant
       next_page_button = driver.find_elements(css: '#FooterPageNav li.next').first
 
-      # driver.save_screenshot('/site_scrapper_volume/foo.png')
-      # require 'pry'; binding.pry
-
-      # TODO: тут проблема с модалкой: JAModal
-      # кажется она рандомно появляется. надо найти у нее кнопку:
-      # и поэтому же видимо была проблема с кликаньем на элементы списка вакансий (можно к этому вернуться и убрать
-      # убогий код с кучей табов)
-      #
-      # svg с классом 'SVGInline-svg modal_closeIcon-svg' и нажать на нее
-
-      # next_page_button.click
       Utils.new(driver, wait).kill_intrusive_modal { next_page_button.click }
 
       # TODO: obviously it's better to find another way to guarantee that new content is already loaded:
@@ -231,7 +229,16 @@ class Scrapper
 
   def enter_search_query
     element = wait.until { driver.find_element(id: 'sc.location') }
-    element.clear
+
+    # It worked at first, but now 'clear' has no effect on the input:
+    # So I'm just pressing delete + backspace a lot.
+    # element.clear
+
+    text_size = element.property('value').size
+    text_size.times do
+      element.send_keys(Selenium::WebDriver::Keys::KEYS[:delete])
+      element.send_keys(Selenium::WebDriver::Keys::KEYS[:backspace])
+    end
 
     element = wait.until { driver.find_element(id: 'sc.location') }
     element.send_keys(ENV.fetch('location'))
@@ -240,11 +247,13 @@ class Scrapper
     element = wait.until { driver.find_element(id: 'sc.keyword') }
     element.send_keys(ENV.fetch('query'))
     sleep(0.1)
+
     element.send_keys(Selenium::WebDriver::Keys::KEYS[:return])
   end
 
   def collect_vacancies_page(arr, counter)
-    vacancies_count = wait.until { driver.find_elements(css: 'article#MainCol div.jobContainer') }.size
+    # vacancies_count = wait.until { driver.find_elements(css: 'article#MainCol div.jobContainer') }.size
+    vacancies_count = wait.until { driver.find_elements(css: 'article#MainCol li.react-job-listing') }.size
 
     vacancies_count.times do |index|
       puts "vacancy: #{counter[:current_vacancy]}"
